@@ -182,19 +182,26 @@
           this.y += dy * 0.02;
         }
       }
-      draw() {
-        if (!gearImgLoaded) return;
-        ctx.save();
-        if (this.type === "black") {
-          ctx.filter = "none";
-        } else if (this.type === "gray") {
-          ctx.filter = "invert(50%)"; // mid-gray effect
-        } else if (this.type === "white") {
-          ctx.filter = "invert(100%)"; // white
-        }
-        ctx.drawImage(gearImg, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
-        ctx.restore();
-      }
+draw() {
+  if (!gearImgLoaded) return;
+  ctx.save();
+  if (this.type === "black") {
+    // Leave the gear as-is (black)
+    ctx.filter = "none";
+  } else if (this.type === "gray") {
+    // For the "gray" type, we want the gear to appear teal.
+    // The following filter sequence first inverts the image,
+    // applies a sepia tone, boosts the saturation, and then shifts the hue.
+    // You may need to tweak these values for your specific asset.
+    ctx.filter = "invert(100%) sepia(100%) saturate(600%) hue-rotate(150deg)";
+  } else if (this.type === "white") {
+    // For the "white" type, we want the gear to appear red.
+    // Again, we invert, apply sepia, boost saturation, and shift the hue.
+    ctx.filter = "invert(100%) sepia(100%) saturate(600%) hue-rotate(0deg)";
+  }
+  ctx.drawImage(gearImg, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+  ctx.restore();
+}
     }
 
     // Updated Claw Class: Draws a larger, triangular claw with a black outline.
@@ -465,27 +472,9 @@
           ctx.font = "30px Arial";
           ctx.fillText("Paused", canvas.width / 2 - 50, canvas.height / 2);
         }
-      } else if (gameState === "gameover") {
-        // ----- Game Over Screen -----
-        ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "white";
-        ctx.font = "40px Arial";
-        ctx.fillText("Game Over", canvas.width / 2 - 100, canvas.height / 2 - 20);
-        ctx.font = "20px Arial";
-        ctx.fillText("Click the button below to return Home", canvas.width / 2 - 150, canvas.height / 2 + 10);
-        // Draw Return Home button
-        const btnX = canvas.width / 2 - 100;
-        const btnY = canvas.height / 2 + 40;
-        const btnW = 200;
-        const btnH = 50;
-        ctx.fillStyle = "#007BFF";
-        ctx.fillRect(btnX, btnY, btnW, btnH);
-        ctx.fillStyle = "white";
-        ctx.font = "20px Arial";
-        ctx.fillText("Return Home", btnX + 35, btnY + 30);
-        renderGameOverScreen();
-      }
+  } else if (gameState === "gameover") {
+    renderGameOverScreen();
+  }
       
       // Transition to game over if Junk Bot runs out of hearts
       if (junkBot.hearts <= 0 && gameState === "playing") {
