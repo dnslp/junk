@@ -31,17 +31,21 @@
     let gameState = "start";
     let gamePaused = false;
     
-    // Global variables for score and game objects
+    // Global game variables
     let score = 0;
     const requiredScoreForClaw = 50;
     let gears = [];       // Array of Gear objects
     let platforms = [];   // Array of platform objects
-    let claw = null;      // Claw hazard object
+    let claw = null;      // Active Claw hazard object
     
-    // New: Projectiles array for shots
+    // New: Projectiles array (for shooting)
     let projectiles = [];
-    // Global: track the last arrow direction (default "right")
+    // Track the last arrow direction (default "right")
     let lastDirection = "right";
+    
+    // NEW for Claw Event: variables to control the repeated claw
+    let clawEventActive = false;
+    let clawEventStartTime = 0;
     
     // Key tracking
     const keys = {};
@@ -49,7 +53,7 @@
     // -------------------------------------
     // 2. LOAD ASSETS
     // -------------------------------------
-    // Background image: junkyard.jpg (in root folder)
+    // Background image (junkyard.jpg in root folder)
     const bgImage = new Image();
     bgImage.crossOrigin = "anonymous";
     bgImage.src = "junkyard.jpg";
@@ -57,7 +61,7 @@
     bgImage.onload = () => { bgImageLoaded = true; };
     bgImage.onerror = () => { console.error("Failed to load background image."); };
     
-    // Junk Bot sprite: junkbot.png (in root folder)
+    // Junk Bot sprite (junkbot.png in root folder)
     const junkBotImg = new Image();
     junkBotImg.crossOrigin = "anonymous";
     junkBotImg.src = "junkbot.png";
@@ -65,7 +69,7 @@
     junkBotImg.onload = () => { junkBotImgLoaded = true; };
     junkBotImg.onerror = () => { console.error("Failed to load Junk Bot image."); };
     
-    // Gear asset: gear-black.png (in root folder, recolored via filters)
+    // Gear asset (gear-black.png in root folder)
     const gearImg = new Image();
     gearImg.crossOrigin = "anonymous";
     gearImg.src = "gear-black.png";
@@ -73,12 +77,12 @@
     gearImg.onload = () => { gearImgLoaded = true; };
     gearImg.onerror = () => { console.error("Failed to load Gear image."); };
     
-    // Sound effects
+    // Sound effects (URLs can be updated as desired)
     const jumpSound   = new Audio("https://actions.google.com/sounds/v1/cartoon/boing.ogg");
     const gearSound   = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
     const damageSound = new Audio("https://actions.google.com/sounds/v1/cartoon/pop.ogg");
     const clawSound   = new Audio("https://actions.google.com/sounds/v1/cartoon/clang.ogg");
-    // New sounds for shooting and projectile collisions
+    // New sounds for shooting, power-up, and projectile gear hits
     const shootSound  = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
     const happySound  = new Audio("https://actions.google.com/sounds/v1/cartoon/cowbell.ogg");
     const sadSound    = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
@@ -92,18 +96,22 @@
       reset() {
         this.x = 50;
         this.y = canvas.height - 70;
-        this.width = 60;
-        this.height = 60;
+        this.width = 50;
+        this.height = 50;
         this.velX = 0;
         this.velY = 0;
         this.speed = 5;
         this.jumpForce = 18;
         this.grounded = false;
-        this.hearts = 10;
+        this.hearts = 15;
         this.magnetStrength = 0;
+        // NEW: Power-up properties
+        this.powerUpActive = false;
+        this.nextPowerShotTime = 0;
+        this.powerUpEndTime = 0;
       }
       update() {
-        // Movement (update lastDirection for shooting)
+        // Update movement and lastDirection for shooting
         if (keys["ArrowRight"]) {
           this.velX = this.speed;
           lastDirection = "right";
@@ -125,7 +133,7 @@
         this.velY += 0.8;
         this.x += this.velX;
         this.y += this.velY;
-        // Collision with platforms
+        // Platform collision
         this.grounded = false;
         for (let plat of platforms) {
           if (this.x < plat.x + plat.width &&
@@ -137,7 +145,7 @@
             this.grounded = true;
           }
         }
-        // Constrain within canvas boundaries
+        // Constrain within canvas
         if (this.x < 0) this.x = 0;
         if (this.x + this.width > canvas.width)
           this.x = canvas.width - this.width;
@@ -149,7 +157,7 @@
           ctx.fillStyle = "teal";
           ctx.fillRect(this.x, this.y, this.width, this.height);
         }
-        // Draw HUD: hearts, score, magnet level
+        // HUD
         ctx.fillStyle = "red";
         ctx.font = "20px Arial";
         ctx.fillText(`Hearts: ${this.hearts}`, 10, 25);
@@ -161,10 +169,10 @@
     }
     const junkBot = new JunkBot();
     
-    // Gear Class (uses a single gear image with canvas filters)
+    // Gear Class – supports types: "gray", "black", "white", "orange"
     class Gear {
       constructor(type, x, y) {
-        this.type = type; // "gray", "black", or "white"
+        this.type = type; // "gray", "black", "white", or "orange"
         this.x = x;
         this.y = y;
         this.radius = 15;
@@ -181,16 +189,19 @@
       draw() {
         if (!gearImgLoaded) return;
         ctx.save();
-        // Adjust filters so that:
+        // Apply filters for the different gear types:
         // "black": no filter (black)
         // "gray": becomes teal
         // "white": becomes red
+        // "orange": becomes orange
         if (this.type === "black") {
           ctx.filter = "none";
         } else if (this.type === "gray") {
           ctx.filter = "invert(100%) sepia(100%) saturate(600%) hue-rotate(150deg)";
         } else if (this.type === "white") {
           ctx.filter = "invert(100%) sepia(100%) saturate(600%) hue-rotate(0deg)";
+        } else if (this.type === "orange") {
+          ctx.filter = "invert(100%) sepia(100%) saturate(600%) hue-rotate(30deg)";
         }
         ctx.drawImage(gearImg, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
         ctx.restore();
@@ -202,8 +213,8 @@
       constructor() {
         this.x = junkBot.x + junkBot.width / 2;
         this.y = -50;
-        this.width = 45;  // Increased width
-        this.height = 70; // Increased height
+        this.width = 45;
+        this.height = 70;
         this.active = true;
       }
       update() {
@@ -263,7 +274,7 @@
     }
     initPlatforms();
     
-    // Reset game variables when starting/restarting the game
+    // Reset game variables when starting/restarting the game.
     function resetGame() {
       score = 0;
       gears = [];
@@ -272,15 +283,17 @@
       junkBot.reset();
       initPlatforms();
       gamePaused = false;
+      clawEventActive = false;
     }
     
-    // Spawn a random gear every 2 seconds
+    // Spawn a random gear every 2 seconds.
     function spawnRandomGear() {
       let rand = Math.random();
       let gearType;
       if (rand < 0.6) { gearType = "gray"; }
       else if (rand < 0.8) { gearType = "black"; }
-      else { gearType = "white"; }
+      else if (rand < 0.95) { gearType = "white"; }
+      else { gearType = "orange"; }
       const x = Math.random() * (canvas.width - 40) + 20;
       const y = Math.random() * (canvas.height - 200) + 50;
       gears.push(new Gear(gearType, x, y));
@@ -323,6 +336,15 @@
             junkBot.hearts = Math.min(junkBot.hearts + 1, 15);
             gearSound.currentTime = 0;
             gearSound.play();
+          } else if (gear.type === "orange") {
+            // Trigger power-up: Junk Bot shoots from every direction for 3 seconds.
+            junkBot.powerUpActive = true;
+            junkBot.powerUpEndTime = Date.now() + 3000;
+            junkBot.nextPowerShotTime = Date.now();
+            // Optional: add extra score for collecting orange gear.
+            score += 10;
+            shootSound.currentTime = 0;
+            shootSound.play();
           }
           gears.splice(i, 1);
         }
@@ -338,14 +360,12 @@
           projectiles.splice(i, 1);
           continue;
         }
-        // Check collision with gears
         for (let j = gears.length - 1; j >= 0; j--) {
           let gear = gears[j];
           let dx = proj.x - gear.x;
           let dy = proj.y - gear.y;
           let distance = Math.sqrt(dx * dx + dy * dy);
           if (distance < proj.radius + gear.radius) {
-            // Play sound based on gear type:
             if (gear.type === "black") {
               happySound.currentTime = 0;
               happySound.play();
@@ -353,7 +373,6 @@
               sadSound.currentTime = 0;
               sadSound.play();
             }
-            // Remove both projectile and gear on hit.
             gears.splice(j, 1);
             projectiles.splice(i, 1);
             break;
@@ -362,7 +381,7 @@
       }
     }
     
-    // New helper function: render the Game Over screen.
+    // New helper function: Render the Game Over screen.
     function renderGameOverScreen() {
       ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -371,7 +390,6 @@
       ctx.fillText("Game Over", canvas.width / 2 - 100, canvas.height / 2 - 20);
       ctx.font = "20px Arial";
       ctx.fillText("Click the button below to return Home", canvas.width / 2 - 150, canvas.height / 2 + 10);
-      // Draw the Return Home button
       const btnX = canvas.width / 2 - 100;
       const btnY = canvas.height / 2 + 40;
       const btnW = 200;
@@ -389,7 +407,7 @@
     function gameLoop() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Draw background (with fallback)
+      // Draw background
       if (bgImageLoaded) {
         ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
       } else {
@@ -408,11 +426,11 @@
         ctx.fillText("Use arrow keys to move & jump", canvas.width / 2 - 130, canvas.height / 2);
         ctx.fillText("Collect gears to boost score and power", canvas.width / 2 - 160, canvas.height / 2 + 30);
         ctx.fillText("Press Space to shoot gears", canvas.width / 2 - 140, canvas.height / 2 + 60);
-        ctx.fillText("Watch out for the claw hazard every 50 points!", canvas.width / 2 - 190, canvas.height / 2 + 90);
+        ctx.fillText("Watch for the claw hazard every 50 points!", canvas.width / 2 - 190, canvas.height / 2 + 90);
+        ctx.fillText("Special Orange Gear triggers auto-shoot for 3 seconds!", canvas.width / 2 - 210, canvas.height / 2 + 120);
         ctx.fillStyle = "yellow";
         ctx.fillText("Press Enter or click to Start", canvas.width / 2 - 130, canvas.height / 2 + 140);
       } else if (gameState === "playing") {
-        // ----- Gameplay -----
         if (!gamePaused) {
           junkBot.update();
           gears.forEach(gear => gear.update());
@@ -426,20 +444,56 @@
             proj.update();
           }
           
-          // Spawn the claw hazard when score meets threshold and no claw is active.
-          if (score > 0 && score % requiredScoreForClaw === 0 && !claw) {
+          // ----- Claw Event: When score is a multiple of 50, activate claw event for 5 seconds -----
+          if (!clawEventActive && score > 0 && score % requiredScoreForClaw === 0) {
+            clawEventActive = true;
+            clawEventStartTime = Date.now();
             clawSound.currentTime = 0;
             clawSound.play();
-            claw = new Claw();
           }
+          if (clawEventActive) {
+            if (Date.now() - clawEventStartTime < 5000) {
+              if (!claw) {
+                claw = new Claw();
+              }
+            } else {
+              clawEventActive = false;
+              claw = null;
+            }
+          }
+          
+          // Auto-fire power-up projectiles if power-up is active
+          if (junkBot.powerUpActive) {
+            if (Date.now() > junkBot.powerUpEndTime) {
+              junkBot.powerUpActive = false;
+            } else if (Date.now() >= junkBot.nextPowerShotTime) {
+              // Fire projectiles in eight directions
+              const directions = [
+                {vx: 10, vy: 0},
+                {vx: -10, vy: 0},
+                {vx: 0, vy: -10},
+                {vx: 0, vy: 10},
+                {vx: 7, vy: -7},
+                {vx: -7, vy: -7},
+                {vx: 7, vy: 7},
+                {vx: -7, vy: 7},
+              ];
+              directions.forEach(dir => {
+                const proj = new Projectile(junkBot.x + junkBot.width/2, junkBot.y + junkBot.height/2, dir.vx, dir.vy);
+                projectiles.push(proj);
+              });
+              junkBot.nextPowerShotTime = Date.now() + 500;
+            }
+          }
+          
+          // Check if claw (if exists) collides with Junk Bot; if so, game over immediately.
           if (claw) {
             const junkBotRect = { x: junkBot.x, y: junkBot.y, width: junkBot.width, height: junkBot.height };
             const clawRect = { x: claw.x, y: claw.y, width: claw.width, height: claw.height };
-            // ----- Modification: When the claw collides, end the game immediately.
-            if (rectCircleCollision(clawRect, { x: junkBot.x + junkBot.width / 2, y: junkBot.y + junkBot.height / 2, radius: 20 })) {
+            if (rectCircleCollision(clawRect, { x: junkBot.x + junkBot.width/2, y: junkBot.y + junkBot.height/2, radius: 20 })) {
               damageSound.currentTime = 0;
               damageSound.play();
-              gameState = "gameover"; // Immediately switch state to gameover
+              gameState = "gameover"; // Immediately end the game
             }
           }
           if (score > 0 && score % 100 === 0) {
@@ -448,14 +502,13 @@
         }
         // Render gameplay objects:
         platforms.forEach(plat => {
-          ctx.fillStyle = "black";
+          ctx.fillStyle = "sienna";
           ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
         });
         junkBot.draw();
         gears.forEach(gear => gear.draw());
         if (claw) { claw.draw(); }
         projectiles.forEach(proj => proj.draw());
-        // Optionally display pause overlay
         if (gamePaused) {
           ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -467,7 +520,7 @@
         renderGameOverScreen();
       }
       
-      // Transition to gameover if Junk Bot runs out of hearts (if not already in gameover state)
+      // Transition to gameover if Junk Bot runs out of hearts (if not already gameover)
       if (junkBot.hearts <= 0 && gameState === "playing") {
         gameState = "gameover";
       }
@@ -480,7 +533,6 @@
     // -------------------------------------
     window.addEventListener("keydown", e => {
       keys[e.key] = true;
-      // Update lastDirection when arrow keys are pressed
       if (e.key === "ArrowRight") { lastDirection = "right"; }
       else if (e.key === "ArrowLeft") { lastDirection = "left"; }
       else if (e.key === "ArrowUp") { lastDirection = "up"; }
@@ -493,7 +545,7 @@
       if (gameState === "playing" && e.key.toLowerCase() === "p") {
         gamePaused = !gamePaused;
       }
-      // When Space bar is pressed during play, fire a projectile.
+      // On Space bar during play, fire a projectile in the last direction.
       if (gameState === "playing" && e.code === "Space") {
         const projSpeed = 10;
         let vx = 0, vy = 0;
