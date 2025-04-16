@@ -49,36 +49,36 @@
     // -------------------------------------
     // 2. LOAD ASSETS
     // -------------------------------------
-    // Background image: junkyard.jpg
+    // Background image: junkyard.jpg (in root folder)
     const bgImage = new Image();
     bgImage.crossOrigin = "anonymous";
-    bgImage.src = "junkyard.jpg"; // Asset in the root folder
+    bgImage.src = "junkyard.jpg";
     let bgImageLoaded = false;
     bgImage.onload = () => { bgImageLoaded = true; };
     bgImage.onerror = () => { console.error("Failed to load background image."); };
     
-    // Junk Bot sprite: junkbot.png
+    // Junk Bot sprite: junkbot.png (in root folder)
     const junkBotImg = new Image();
     junkBotImg.crossOrigin = "anonymous";
-    junkBotImg.src = "junkbot.png"; // Asset in the root folder
+    junkBotImg.src = "junkbot.png";
     let junkBotImgLoaded = false;
     junkBotImg.onload = () => { junkBotImgLoaded = true; };
     junkBotImg.onerror = () => { console.error("Failed to load Junk Bot image."); };
     
-    // Gear asset: gear-black.png (used for all gears, recolored via filters)
+    // Gear asset: gear-black.png (in root folder, recolored via filters)
     const gearImg = new Image();
     gearImg.crossOrigin = "anonymous";
-    gearImg.src = "gear-black.png"; // Asset in the root folder
+    gearImg.src = "gear-black.png";
     let gearImgLoaded = false;
     gearImg.onload = () => { gearImgLoaded = true; };
     gearImg.onerror = () => { console.error("Failed to load Gear image."); };
     
-    // Sound effects (update URLs if desired)
+    // Sound effects
     const jumpSound   = new Audio("https://actions.google.com/sounds/v1/cartoon/boing.ogg");
     const gearSound   = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
     const damageSound = new Audio("https://actions.google.com/sounds/v1/cartoon/pop.ogg");
     const clawSound   = new Audio("https://actions.google.com/sounds/v1/cartoon/clang.ogg");
-    // New sounds for shooting and gear hit by projectiles
+    // New sounds for shooting and projectile collisions
     const shootSound  = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
     const happySound  = new Audio("https://actions.google.com/sounds/v1/cartoon/cowbell.ogg");
     const sadSound    = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
@@ -92,8 +92,8 @@
       reset() {
         this.x = 50;
         this.y = canvas.height - 70;
-        this.width = 50;
-        this.height = 50;
+        this.width = 60;
+        this.height = 60;
         this.velX = 0;
         this.velY = 0;
         this.speed = 5;
@@ -137,7 +137,7 @@
             this.grounded = true;
           }
         }
-        // Constrain within canvas
+        // Constrain within canvas boundaries
         if (this.x < 0) this.x = 0;
         if (this.x + this.width > canvas.width)
           this.x = canvas.width - this.width;
@@ -167,7 +167,7 @@
         this.type = type; // "gray", "black", or "white"
         this.x = x;
         this.y = y;
-        this.radius = 25;
+        this.radius = 15;
       }
       update() {
         const dx = (junkBot.x + junkBot.width / 2) - this.x;
@@ -182,9 +182,9 @@
         if (!gearImgLoaded) return;
         ctx.save();
         // Adjust filters so that:
-        // - "black": no filter (black)
-        // - "gray": becomes teal
-        // - "white": becomes red
+        // "black": no filter (black)
+        // "gray": becomes teal
+        // "white": becomes red
         if (this.type === "black") {
           ctx.filter = "none";
         } else if (this.type === "gray") {
@@ -435,14 +435,12 @@
           if (claw) {
             const junkBotRect = { x: junkBot.x, y: junkBot.y, width: junkBot.width, height: junkBot.height };
             const clawRect = { x: claw.x, y: claw.y, width: claw.width, height: claw.height };
+            // ----- Modification: When the claw collides, end the game immediately.
             if (rectCircleCollision(clawRect, { x: junkBot.x + junkBot.width / 2, y: junkBot.y + junkBot.height / 2, radius: 20 })) {
-              junkBot.hearts -= 1;
               damageSound.currentTime = 0;
               damageSound.play();
-              claw.active = false;
-              claw = null;
+              gameState = "gameover"; // Immediately switch state to gameover
             }
-            if (!claw.active) { claw = null; }
           }
           if (score > 0 && score % 100 === 0) {
             junkBot.speed = 5 + Math.floor(score / 100);
@@ -450,13 +448,12 @@
         }
         // Render gameplay objects:
         platforms.forEach(plat => {
-          ctx.fillStyle = "sienna";
+          ctx.fillStyle = "black";
           ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
         });
         junkBot.draw();
         gears.forEach(gear => gear.draw());
         if (claw) { claw.draw(); }
-        // Draw projectiles
         projectiles.forEach(proj => proj.draw());
         // Optionally display pause overlay
         if (gamePaused) {
@@ -470,7 +467,7 @@
         renderGameOverScreen();
       }
       
-      // Transition to game over if Junk Bot runs out of hearts
+      // Transition to gameover if Junk Bot runs out of hearts (if not already in gameover state)
       if (junkBot.hearts <= 0 && gameState === "playing") {
         gameState = "gameover";
       }
@@ -524,7 +521,6 @@
         gameState = "playing";
       } else if (gameState === "gameover") {
         // Check if click is inside the "Return Home" button
-        renderGameOverScreen()
         const btnX = canvas.width / 2 - 100;
         const btnY = canvas.height / 2 + 40;
         const btnW = 200;
