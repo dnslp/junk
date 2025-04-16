@@ -31,20 +31,25 @@
     let gameState = "start";
     let gamePaused = false;
     
-    // Key tracking
-    const keys = {};
-    
-    // Score & game variables
+    // Global variables for score and game objects
     let score = 0;
     const requiredScoreForClaw = 50;
-    let gears = [];       // Array for gear objects
-    let platforms = [];   // Array for platform objects
+    let gears = [];       // Array of Gear objects
+    let platforms = [];   // Array of platform objects
     let claw = null;      // Claw hazard object
+    
+    // New: Projectiles array for shots
+    let projectiles = [];
+    // Global: track the last arrow direction (default "right")
+    let lastDirection = "right";
+    
+    // Key tracking
+    const keys = {};
 
     // -------------------------------------
     // 2. LOAD ASSETS
     // -------------------------------------
-    // Background: junkyard.jpeg
+    // Background image: junkyard.jpeg
     const bgImage = new Image();
     bgImage.crossOrigin = "anonymous";
     bgImage.src = "junkyard.jpg"; // Update path if necessary
@@ -60,7 +65,7 @@
     junkBotImg.onload = () => { junkBotImgLoaded = true; };
     junkBotImg.onerror = () => { console.error("Failed to load Junk Bot image."); };
     
-    // Gear asset: gear-black.png (we'll recolor via filters)
+    // Gear asset: gear-black.png (used for all gears, recolored via filters)
     const gearImg = new Image();
     gearImg.crossOrigin = "anonymous";
     gearImg.src = "gear-black.png"; // Update path if necessary
@@ -68,11 +73,15 @@
     gearImg.onload = () => { gearImgLoaded = true; };
     gearImg.onerror = () => { console.error("Failed to load Gear image."); };
 
-    // Sound effects
+    // Sound effects (update URLs if desired)
     const jumpSound   = new Audio("https://actions.google.com/sounds/v1/cartoon/boing.ogg");
     const gearSound   = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
     const damageSound = new Audio("https://actions.google.com/sounds/v1/cartoon/pop.ogg");
     const clawSound   = new Audio("https://actions.google.com/sounds/v1/cartoon/clang.ogg");
+    // New sounds for shooting and gear hit by projectiles
+    const shootSound  = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+    const happySound  = new Audio("https://actions.google.com/sounds/v1/cartoon/cowbell.ogg");
+    const sadSound    = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 
     // -------------------------------------
     // 3. GAME CLASSES
@@ -94,20 +103,33 @@
         this.magnetStrength = 0;
       }
       update() {
-        if (keys["ArrowRight"]) { this.velX = this.speed; }
-        else if (keys["ArrowLeft"]) { this.velX = -this.speed; }
-        else { this.velX = 0; }
+        // Movement (and update lastDirection for shooting)
+        if (keys["ArrowRight"]) {
+          this.velX = this.speed;
+          lastDirection = "right";
+        } else if (keys["ArrowLeft"]) {
+          this.velX = -this.speed;
+          lastDirection = "left";
+        } else {
+          this.velX = 0;
+        }
+        if (keys["ArrowUp"]) {
+          lastDirection = "up";
+        }
+        if (keys["ArrowDown"]) {
+          lastDirection = "down";
+        }
         if (keys["ArrowUp"] && this.grounded) {
           this.velY = -this.jumpForce;
           this.grounded = false;
           jumpSound.currentTime = 0;
           jumpSound.play();
         }
+        // Apply gravity
         this.velY += 0.8;
         this.x += this.velX;
         this.y += this.velY;
-        
-        // Check collision with platforms
+        // Collision with platforms
         this.grounded = false;
         for (let plat of platforms) {
           if (this.x < plat.x + plat.width &&
@@ -119,6 +141,7 @@
             this.grounded = true;
           }
         }
+        // Constrain within canvas boundaries
         if (this.x < 0) this.x = 0;
         if (this.x + this.width > canvas.width)
           this.x = canvas.width - this.width;
@@ -130,7 +153,7 @@
           ctx.fillStyle = "teal";
           ctx.fillRect(this.x, this.y, this.width, this.height);
         }
-        // Draw HUD
+        // Draw HUD: hearts, score, magnet level
         ctx.fillStyle = "red";
         ctx.font = "20px Arial";
         ctx.fillText(`Hearts: ${this.hearts}`, 10, 25);
@@ -142,7 +165,7 @@
     }
     const junkBot = new JunkBot();
 
-    // Gear Class (uses a single gear image with color filters)
+    // Gear Class (uses a single gear image with canvas filters)
     class Gear {
       constructor(type, x, y) {
         this.type = type; // "gray", "black", or "white"
@@ -165,24 +188,22 @@
         if (this.type === "black") {
           ctx.filter = "none";
         } else if (this.type === "gray") {
-          ctx.filter = "invert(50%)";
+          ctx.filter = "invert(50%)"; // mid-gray effect
         } else if (this.type === "white") {
-          ctx.filter = "invert(100%)";
+          ctx.filter = "invert(100%)"; // white
         }
         ctx.drawImage(gearImg, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
         ctx.restore();
       }
     }
 
-    // Updated Claw Class: Drawn as an enlarged triangle with a black outline
+    // Updated Claw Class: Draws a larger, triangular claw with a black outline.
     class Claw {
       constructor() {
-        // Position near Junk Bot's center
         this.x = junkBot.x + junkBot.width / 2;
         this.y = -50;
-        // Increased size for visibility
-        this.width = 45;  
-        this.height = 70; 
+        this.width = 45;  // Increased width
+        this.height = 70; // Increased height
         this.active = true;
       }
       update() {
@@ -194,7 +215,6 @@
       draw() {
         if (this.active) {
           ctx.beginPath();
-          // Draw an isosceles triangle:
           ctx.moveTo(this.x, this.y);
           ctx.lineTo(this.x - this.width / 2, this.y + this.height);
           ctx.lineTo(this.x + this.width / 2, this.y + this.height);
@@ -208,6 +228,28 @@
       }
     }
 
+    // New: Projectile Class (for shooting)
+    class Projectile {
+      constructor(x, y, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.radius = 5;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+      }
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "orange";
+        ctx.fill();
+        ctx.closePath();
+      }
+    }
+
     // -------------------------------------
     // 4. INITIALIZE GAME OBJECTS
     // -------------------------------------
@@ -215,23 +257,24 @@
       platforms = [];
       // Ground platform
       platforms.push({ x: 0, y: canvas.height - 20, width: canvas.width, height: 20 });
-      // Additional platforms for variety
+      // Additional platforms
       platforms.push({ x: 200, y: 300, width: 150, height: 15 });
       platforms.push({ x: 450, y: 200, width: 150, height: 15 });
     }
     initPlatforms();
 
-    // Reset game variables when starting a new game
+    // Reset game variables when starting/restarting the game
     function resetGame() {
       score = 0;
       gears = [];
       claw = null;
+      projectiles = [];
       junkBot.reset();
       initPlatforms();
       gamePaused = false;
     }
 
-    // Spawn a random gear every 2 seconds.
+    // Spawn a random gear every 2 seconds
     function spawnRandomGear() {
       let rand = Math.random();
       let gearType;
@@ -286,13 +329,46 @@
       }
     }
 
+    // New: Check collisions between projectiles and gears.
+    function checkProjectileCollisions() {
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        let proj = projectiles[i];
+        // Remove projectile if it leaves the canvas
+        if (proj.x < 0 || proj.x > canvas.width || proj.y < 0 || proj.y > canvas.height) {
+          projectiles.splice(i, 1);
+          continue;
+        }
+        // Check collision with gears
+        for (let j = gears.length - 1; j >= 0; j--) {
+          let gear = gears[j];
+          let dx = proj.x - gear.x;
+          let dy = proj.y - gear.y;
+          let distance = Math.sqrt(dx * dx + dy * dy);
+          if (distance < proj.radius + gear.radius) {
+            // Play sound based on gear type:
+            if (gear.type === "black") {
+              happySound.currentTime = 0;
+              happySound.play();
+            } else {
+              sadSound.currentTime = 0;
+              sadSound.play();
+            }
+            // Remove both projectile and gear on hit.
+            gears.splice(j, 1);
+            projectiles.splice(i, 1);
+            break;
+          }
+        }
+      }
+    }
+
     // -------------------------------------
     // 6. GAME LOOP & UI RENDERING
     // -------------------------------------
     function gameLoop() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Draw background
+      // Draw background (with fallback)
       if (bgImageLoaded) {
         ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
       } else {
@@ -310,9 +386,10 @@
         ctx.font = "20px Arial";
         ctx.fillText("Use arrow keys to move & jump", canvas.width / 2 - 130, canvas.height / 2);
         ctx.fillText("Collect gears to boost score and power", canvas.width / 2 - 160, canvas.height / 2 + 30);
-        ctx.fillText("Watch out for the claw hazard every 50 points!", canvas.width / 2 - 190, canvas.height / 2 + 60);
+        ctx.fillText("Press Space to shoot gears", canvas.width / 2 - 140, canvas.height / 2 + 60);
+        ctx.fillText("Watch out for the claw hazard every 50 points!", canvas.width / 2 - 190, canvas.height / 2 + 90);
         ctx.fillStyle = "yellow";
-        ctx.fillText("Press Enter or click to Start", canvas.width / 2 - 130, canvas.height / 2 + 120);
+        ctx.fillText("Press Enter or click to Start", canvas.width / 2 - 130, canvas.height / 2 + 140);
       } else if (gameState === "playing") {
         // ----- Gameplay -----
         if (!gamePaused) {
@@ -320,7 +397,15 @@
           gears.forEach(gear => gear.update());
           if (claw) { claw.update(); }
           checkGearCollection();
-          // Spawn the claw hazard when score meets threshold and no claw is active.
+          checkProjectileCollisions();
+          
+          // Update projectiles
+          for (let i = projectiles.length - 1; i >= 0; i--) {
+            let proj = projectiles[i];
+            proj.update();
+          }
+          
+          // Spawn the claw hazard when score meets threshold and no claw is active
           if (score > 0 && score % requiredScoreForClaw === 0 && !claw) {
             clawSound.currentTime = 0;
             clawSound.play();
@@ -342,15 +427,17 @@
             junkBot.speed = 5 + Math.floor(score / 100);
           }
         }
-        // Render gameplay objects
+        // Render gameplay objects:
         platforms.forEach(plat => {
-          ctx.fillStyle = "black";
+          ctx.fillStyle = "sienna";
           ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
         });
         junkBot.draw();
         gears.forEach(gear => gear.draw());
         if (claw) { claw.draw(); }
-        // Optionally display a pause overlay
+        // Draw projectiles
+        projectiles.forEach(proj => proj.draw());
+        // Optionally display pause overlay
         if (gamePaused) {
           ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -367,7 +454,7 @@
         ctx.fillText("Game Over", canvas.width / 2 - 100, canvas.height / 2 - 20);
         ctx.font = "20px Arial";
         ctx.fillText("Click the button below to return Home", canvas.width / 2 - 150, canvas.height / 2 + 10);
-        // Draw Restart / Return Home Button
+        // Draw Return Home button
         const btnX = canvas.width / 2 - 100;
         const btnY = canvas.height / 2 + 40;
         const btnW = 200;
@@ -379,7 +466,7 @@
         ctx.fillText("Return Home", btnX + 35, btnY + 30);
       }
       
-      // Check game over condition
+      // Transition to game over if Junk Bot runs out of hearts
       if (junkBot.hearts <= 0 && gameState === "playing") {
         gameState = "gameover";
       }
@@ -392,12 +479,37 @@
     // -------------------------------------
     window.addEventListener("keydown", e => {
       keys[e.key] = true;
+      // Update lastDirection when arrow keys are pressed
+      if (e.key === "ArrowRight") { lastDirection = "right"; }
+      else if (e.key === "ArrowLeft") { lastDirection = "left"; }
+      else if (e.key === "ArrowUp") { lastDirection = "up"; }
+      else if (e.key === "ArrowDown") { lastDirection = "down"; }
+      
       if (gameState === "start" && e.key === "Enter") {
         resetGame();
         gameState = "playing";
       }
       if (gameState === "playing" && e.key.toLowerCase() === "p") {
         gamePaused = !gamePaused;
+      }
+      // New: If Space bar is pressed during play, fire a projectile.
+      if (gameState === "playing" && e.code === "Space") {
+        // Determine projectile velocity based on lastDirection.
+        const projSpeed = 10;
+        let vx = 0, vy = 0;
+        if (lastDirection === "left") { vx = -projSpeed; }
+        else if (lastDirection === "right") { vx = projSpeed; }
+        else if (lastDirection === "up") { vy = -projSpeed; }
+        else if (lastDirection === "down") { vy = projSpeed; }
+        // Default to right if lastDirection is somehow unset.
+        if (vx === 0 && vy === 0) { vx = projSpeed; }
+        // Create projectile starting from Junk Bot's center
+        const startX = junkBot.x + junkBot.width / 2;
+        const startY = junkBot.y + junkBot.height / 2;
+        const proj = new Projectile(startX, startY, vx, vy);
+        projectiles.push(proj);
+        shootSound.currentTime = 0;
+        shootSound.play();
       }
     });
     window.addEventListener("keyup", e => { keys[e.key] = false; });
