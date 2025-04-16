@@ -47,7 +47,7 @@
     // Background: junkyard.jpeg
     const bgImage = new Image();
     bgImage.crossOrigin = "anonymous";
-    bgImage.src = "images/junkyard.jpeg"; // Update path if necessary
+    bgImage.src = "junkyard.jpeg"; // Update path if necessary
     let bgImageLoaded = false;
     bgImage.onload = () => { bgImageLoaded = true; };
     bgImage.onerror = () => { console.error("Failed to load background image."); };
@@ -55,7 +55,7 @@
     // Junk Bot sprite: junkbot.png
     const junkBotImg = new Image();
     junkBotImg.crossOrigin = "anonymous";
-    junkBotImg.src = "images/junkbot.png"; // Update path if necessary
+    junkBotImg.src = "junkbot.png"; // Update path if necessary
     let junkBotImgLoaded = false;
     junkBotImg.onload = () => { junkBotImgLoaded = true; };
     junkBotImg.onerror = () => { console.error("Failed to load Junk Bot image."); };
@@ -63,7 +63,7 @@
     // Gear asset: gear-black.png (we'll recolor via filters)
     const gearImg = new Image();
     gearImg.crossOrigin = "anonymous";
-    gearImg.src = "images/gear-black.png"; // Update path if necessary
+    gearImg.src = "gear-black.png"; // Update path if necessary
     let gearImgLoaded = false;
     gearImg.onload = () => { gearImgLoaded = true; };
     gearImg.onerror = () => { console.error("Failed to load Gear image."); };
