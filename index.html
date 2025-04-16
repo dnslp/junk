@@ -21,51 +21,49 @@
 <body>
   <canvas id="gameCanvas" width="800" height="400"></canvas>
   <script>
-    // ------------------------------
-    // 1. SETUP: Canvas, Context & Global Variables
-    // ------------------------------
+    // -------------------------------------
+    // 1. SETUP: Canvas, Context, & Globals
+    // -------------------------------------
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
-
-    // We'll use a state machine for the UI:
-    // "start" = start/home screen; "playing" = game in progress; "gameover" = game over screen
+    
+    // Game states: "start", "playing", "gameover"
     let gameState = "start";
     let gamePaused = false;
-
+    
     // Key tracking
     const keys = {};
-
-    // Score, gear threshold, etc.
+    
+    // Score & game variables
     let score = 0;
     const requiredScoreForClaw = 50;
-    let gears = [];       // Array of gear objects
-    let platforms = [];   // Array of platform objects
-    let claw = null;      // The claw hazard
+    let gears = [];       // Array for gear objects
+    let platforms = [];   // Array for platform objects
+    let claw = null;      // Claw hazard object
 
-    // ------------------------------
+    // -------------------------------------
     // 2. LOAD ASSETS
-    // ------------------------------
-
-    // Background image – junkyard.jpeg
+    // -------------------------------------
+    // Background: junkyard.jpeg
     const bgImage = new Image();
     bgImage.crossOrigin = "anonymous";
-    bgImage.src = "junkyard.jpg";  // Place your junkyard.jpeg in images folder
+    bgImage.src = "images/junkyard.jpeg"; // Update path if necessary
     let bgImageLoaded = false;
     bgImage.onload = () => { bgImageLoaded = true; };
     bgImage.onerror = () => { console.error("Failed to load background image."); };
-
-    // Junk Bot sprite – junkbot.png
+    
+    // Junk Bot sprite: junkbot.png
     const junkBotImg = new Image();
     junkBotImg.crossOrigin = "anonymous";
-    junkBotImg.src = "junkbot.png";   // Place your junkbot.png in images folder
+    junkBotImg.src = "images/junkbot.png"; // Update path if necessary
     let junkBotImgLoaded = false;
     junkBotImg.onload = () => { junkBotImgLoaded = true; };
     junkBotImg.onerror = () => { console.error("Failed to load Junk Bot image."); };
-
-    // Gear image – gear-black.png (used for all gears)
+    
+    // Gear asset: gear-black.png (we'll recolor via filters)
     const gearImg = new Image();
     gearImg.crossOrigin = "anonymous";
-    gearImg.src = "gear-black.png";  // Place your gear-black.png in images folder
+    gearImg.src = "images/gear-black.png"; // Update path if necessary
     let gearImgLoaded = false;
     gearImg.onload = () => { gearImgLoaded = true; };
     gearImg.onerror = () => { console.error("Failed to load Gear image."); };
@@ -76,15 +74,12 @@
     const damageSound = new Audio("https://actions.google.com/sounds/v1/cartoon/pop.ogg");
     const clawSound   = new Audio("https://actions.google.com/sounds/v1/cartoon/clang.ogg");
 
-    // ------------------------------
+    // -------------------------------------
     // 3. GAME CLASSES
-    // ------------------------------
-
+    // -------------------------------------
     // Junk Bot (Player) Class
     class JunkBot {
-      constructor() {
-        this.reset();
-      }
+      constructor() { this.reset(); }
       reset() {
         this.x = 50;
         this.y = canvas.height - 70;
@@ -93,60 +88,49 @@
         this.velX = 0;
         this.velY = 0;
         this.speed = 5;
-        this.jumpForce = 15;
+        this.jumpForce = 18;
         this.grounded = false;
         this.hearts = 15;
         this.magnetStrength = 0;
       }
       update() {
-        // Horizontal movement
-        if (keys["ArrowRight"]) {
-          this.velX = this.speed;
-        } else if (keys["ArrowLeft"]) {
-          this.velX = -this.speed;
-        } else {
-          this.velX = 0;
-        }
-        // Jumping
+        if (keys["ArrowRight"]) { this.velX = this.speed; }
+        else if (keys["ArrowLeft"]) { this.velX = -this.speed; }
+        else { this.velX = 0; }
         if (keys["ArrowUp"] && this.grounded) {
           this.velY = -this.jumpForce;
           this.grounded = false;
           jumpSound.currentTime = 0;
           jumpSound.play();
         }
-        // Gravity & update position
         this.velY += 0.8;
         this.x += this.velX;
         this.y += this.velY;
-
-        // Collision with platforms
+        
+        // Check collision with platforms
         this.grounded = false;
         for (let plat of platforms) {
-          if (
-            this.x < plat.x + plat.width &&
-            this.x + this.width > plat.x &&
-            this.y + this.height <= plat.y + plat.height &&
-            this.y + this.height >= plat.y
-          ) {
+          if (this.x < plat.x + plat.width &&
+              this.x + this.width > plat.x &&
+              this.y + this.height <= plat.y + plat.height &&
+              this.y + this.height >= plat.y) {
             this.y = plat.y - this.height;
             this.velY = 0;
             this.grounded = true;
           }
         }
-        // Keep inside canvas
         if (this.x < 0) this.x = 0;
         if (this.x + this.width > canvas.width)
           this.x = canvas.width - this.width;
       }
       draw() {
-        // Draw Junk Bot sprite if loaded; otherwise, use a fallback rectangle.
         if (junkBotImgLoaded) {
           ctx.drawImage(junkBotImg, this.x, this.y, this.width, this.height);
         } else {
           ctx.fillStyle = "teal";
           ctx.fillRect(this.x, this.y, this.width, this.height);
         }
-        // Draw HUD (health, score, magnet level)
+        // Draw HUD
         ctx.fillStyle = "red";
         ctx.font = "20px Arial";
         ctx.fillText(`Hearts: ${this.hearts}`, 10, 25);
@@ -158,17 +142,15 @@
     }
     const junkBot = new JunkBot();
 
-    // Gear Class
-    // Uses gearImg and applies different canvas filters based on the type.
+    // Gear Class (uses a single gear image with color filters)
     class Gear {
       constructor(type, x, y) {
-        this.type = type;  // "gray", "black", "white"
+        this.type = type; // "gray", "black", or "white"
         this.x = x;
         this.y = y;
-        this.radius = 15;  // Used as half the desired draw width/height
+        this.radius = 15;
       }
       update() {
-        // Magnet effect: if Junk Bot has magnet power and is near, pull gear toward Junk Bot.
         const dx = (junkBot.x + junkBot.width / 2) - this.x;
         const dy = (junkBot.y + junkBot.height / 2) - this.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -180,61 +162,66 @@
       draw() {
         if (!gearImgLoaded) return;
         ctx.save();
-        // Use canvas filters to change color of the same gear image.
         if (this.type === "black") {
           ctx.filter = "none";
         } else if (this.type === "gray") {
-          ctx.filter = "invert(50%)"; // 50% inverted: mid-gray
+          ctx.filter = "invert(50%)";
         } else if (this.type === "white") {
-          ctx.filter = "invert(100%)"; // full inversion: white gear
+          ctx.filter = "invert(100%)";
         }
-        // Draw gear image centered at (this.x, this.y)
         ctx.drawImage(gearImg, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
         ctx.restore();
       }
     }
 
-    // Claw Class – a hazard that drops every 50 points.
+    // Updated Claw Class: Drawn as an enlarged triangle with a black outline
     class Claw {
       constructor() {
+        // Position near Junk Bot's center
         this.x = junkBot.x + junkBot.width / 2;
         this.y = -50;
-        this.width = 30;
-        this.height = 50;
+        // Increased size for visibility
+        this.width = 45;  
+        this.height = 70; 
         this.active = true;
       }
       update() {
         if (this.active) {
           this.y += 4;
-          if (this.y > canvas.height) {
-            this.active = false;
-          }
+          if (this.y > canvas.height) { this.active = false; }
         }
       }
       draw() {
         if (this.active) {
+          ctx.beginPath();
+          // Draw an isosceles triangle:
+          ctx.moveTo(this.x, this.y);
+          ctx.lineTo(this.x - this.width / 2, this.y + this.height);
+          ctx.lineTo(this.x + this.width / 2, this.y + this.height);
+          ctx.closePath();
           ctx.fillStyle = "darkgray";
-          ctx.fillRect(this.x, this.y, this.width, this.height);
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "black";
+          ctx.stroke();
         }
       }
     }
 
-    // ------------------------------
+    // -------------------------------------
     // 4. INITIALIZE GAME OBJECTS
-    // ------------------------------
-
-    // Set up platforms for Junk Bot to run and jump on.
+    // -------------------------------------
     function initPlatforms() {
       platforms = [];
       // Ground platform
       platforms.push({ x: 0, y: canvas.height - 20, width: canvas.width, height: 20 });
-      // Additional platforms
+      // Additional platforms for variety
       platforms.push({ x: 200, y: 300, width: 150, height: 15 });
       platforms.push({ x: 450, y: 200, width: 150, height: 15 });
     }
     initPlatforms();
 
-    // Reset game variables when starting a new game.
+    // Reset game variables when starting a new game
     function resetGame() {
       score = 0;
       gears = [];
@@ -244,27 +231,22 @@
       gamePaused = false;
     }
 
-    // Spawn a random gear at intervals.
+    // Spawn a random gear every 2 seconds.
     function spawnRandomGear() {
       let rand = Math.random();
       let gearType;
-      if (rand < 0.6) {
-        gearType = "gray";
-      } else if (rand < 0.8) {
-        gearType = "black";
-      } else {
-        gearType = "white";
-      }
+      if (rand < 0.6) { gearType = "gray"; }
+      else if (rand < 0.8) { gearType = "black"; }
+      else { gearType = "white"; }
       const x = Math.random() * (canvas.width - 40) + 20;
       const y = Math.random() * (canvas.height - 200) + 50;
       gears.push(new Gear(gearType, x, y));
     }
-    // Begin spawning gears every 2 seconds.
     const gearInterval = setInterval(spawnRandomGear, 2000);
 
-    // ------------------------------
+    // -------------------------------------
     // 5. COLLISION DETECTION & GEAR COLLECTION
-    // ------------------------------
+    // -------------------------------------
     function circleRectCollision(circle, rect) {
       let distX = Math.abs(circle.x - rect.x - rect.width / 2);
       let distY = Math.abs(circle.y - rect.y - rect.height / 2);
@@ -304,13 +286,12 @@
       }
     }
 
-    // ------------------------------
-    // 6. GAME LOOP & UI STATES
-    // ------------------------------
+    // -------------------------------------
+    // 6. GAME LOOP & UI RENDERING
+    // -------------------------------------
     function gameLoop() {
-      // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+      
       // Draw background
       if (bgImageLoaded) {
         ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
@@ -318,12 +299,9 @@
         ctx.fillStyle = "#444";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
-
-      // Based on the game state, render appropriate UI and/or update game objects.
+      
       if (gameState === "start") {
-        // -------------------------
-        // Start / Home Screen
-        // -------------------------
+        // ----- Start / Home Screen -----
         ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "white";
@@ -332,27 +310,22 @@
         ctx.font = "20px Arial";
         ctx.fillText("Use arrow keys to move & jump", canvas.width / 2 - 130, canvas.height / 2);
         ctx.fillText("Collect gears to boost score and power", canvas.width / 2 - 160, canvas.height / 2 + 30);
-        ctx.fillText("Beware the dropping claw every 50 points!", canvas.width / 2 - 160, canvas.height / 2 + 60);
+        ctx.fillText("Watch out for the claw hazard every 50 points!", canvas.width / 2 - 190, canvas.height / 2 + 60);
         ctx.fillStyle = "yellow";
-        ctx.fillText("Press Enter or Click to Start", canvas.width / 2 - 130, canvas.height / 2 + 120);
+        ctx.fillText("Press Enter or click to Start", canvas.width / 2 - 130, canvas.height / 2 + 120);
       } else if (gameState === "playing") {
-        // -------------------------
-        // Game Play
-        // -------------------------
+        // ----- Gameplay -----
         if (!gamePaused) {
-          // Update game objects
           junkBot.update();
           gears.forEach(gear => gear.update());
-          if (claw) claw.update();
+          if (claw) { claw.update(); }
           checkGearCollection();
-
-          // Claw event: spawn the claw when score is a multiple of requiredScoreForClaw and no claw is active
+          // Spawn the claw hazard when score meets threshold and no claw is active.
           if (score > 0 && score % requiredScoreForClaw === 0 && !claw) {
             clawSound.currentTime = 0;
             clawSound.play();
             claw = new Claw();
           }
-          // Update claw collision with Junk Bot
           if (claw) {
             const junkBotRect = { x: junkBot.x, y: junkBot.y, width: junkBot.width, height: junkBot.height };
             const clawRect = { x: claw.x, y: claw.y, width: claw.width, height: claw.height };
@@ -363,25 +336,21 @@
               claw.active = false;
               claw = null;
             }
-            if (!claw.active) {
-              claw = null;
-            }
+            if (!claw.active) { claw = null; }
           }
-          // Increase Junk Bot's speed every 100 points as a simple level-up effect
           if (score > 0 && score % 100 === 0) {
             junkBot.speed = 5 + Math.floor(score / 100);
           }
         }
-        // Render game objects
+        // Render gameplay objects
         platforms.forEach(plat => {
-          ctx.fillStyle = "sienna";
+          ctx.fillStyle = "black";
           ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
         });
         junkBot.draw();
         gears.forEach(gear => gear.draw());
-        if (claw) claw.draw();
-
-        // Optionally display pause message
+        if (claw) { claw.draw(); }
+        // Optionally display a pause overlay
         if (gamePaused) {
           ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -390,58 +359,73 @@
           ctx.fillText("Paused", canvas.width / 2 - 50, canvas.height / 2);
         }
       } else if (gameState === "gameover") {
-        // -------------------------
-        // Game Over Screen
-        // -------------------------
+        // ----- Game Over Screen -----
         ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "white";
         ctx.font = "40px Arial";
         ctx.fillText("Game Over", canvas.width / 2 - 100, canvas.height / 2 - 20);
         ctx.font = "20px Arial";
-        ctx.fillText("Click to return to Home", canvas.width / 2 - 110, canvas.height / 2 + 20);
+        ctx.fillText("Click the button below to return Home", canvas.width / 2 - 150, canvas.height / 2 + 10);
+        // Draw Restart / Return Home Button
+        const btnX = canvas.width / 2 - 100;
+        const btnY = canvas.height / 2 + 40;
+        const btnW = 200;
+        const btnH = 50;
+        ctx.fillStyle = "#007BFF";
+        ctx.fillRect(btnX, btnY, btnW, btnH);
+        ctx.fillStyle = "white";
+        ctx.font = "20px Arial";
+        ctx.fillText("Return Home", btnX + 35, btnY + 30);
       }
-
-      // Check for game over condition (if Junk Bot loses all hearts)
+      
+      // Check game over condition
       if (junkBot.hearts <= 0 && gameState === "playing") {
         gameState = "gameover";
       }
-
+      
       requestAnimationFrame(gameLoop);
     }
 
-    // ------------------------------
+    // -------------------------------------
     // 7. EVENT LISTENERS & STATE TRANSITIONS
-    // ------------------------------
-    // Keydown events for game state control and movement.
+    // -------------------------------------
     window.addEventListener("keydown", e => {
       keys[e.key] = true;
       if (gameState === "start" && e.key === "Enter") {
         resetGame();
         gameState = "playing";
       }
-      // In playing state, toggle pause with 'p' or 'P'
       if (gameState === "playing" && e.key.toLowerCase() === "p") {
         gamePaused = !gamePaused;
       }
     });
-    window.addEventListener("keyup", e => {
-      keys[e.key] = false;
-    });
-    // Allow mouse clicks to start the game from the start screen or return to home on game over.
-    canvas.addEventListener("click", () => {
+    window.addEventListener("keyup", e => { keys[e.key] = false; });
+    
+    canvas.addEventListener("click", e => {
+      const rect = canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
       if (gameState === "start") {
         resetGame();
         gameState = "playing";
       } else if (gameState === "gameover") {
-        gameState = "start";
+        // Check if click is inside the "Return Home" button
+        const btnX = canvas.width / 2 - 100;
+        const btnY = canvas.height / 2 + 40;
+        const btnW = 200;
+        const btnH = 50;
+        if (clickX >= btnX && clickX <= btnX + btnW &&
+            clickY >= btnY && clickY <= btnY + btnH) {
+          gameState = "start";
+          resetGame();
+        }
       }
     });
 
-    // ------------------------------
+    // -------------------------------------
     // 8. START THE GAME LOOP
-    // ------------------------------
-    // Ensure the game loop runs continuously even from the start screen.
+    // -------------------------------------
     requestAnimationFrame(gameLoop);
   </script>
 </body>
